@@ -1,11 +1,13 @@
-import livros from "../models/Livro.js";
+import { autores, livros } from "../models/index.js";
 
 class LivroController {
   static listarLivros = async (req, res, next) => {
     try {
-      const livrosResultado = await livros.find().populate("autor").exec();
+      const buscaLivros = livros.find();
 
-      res.status(200).json(livrosResultado);
+      req.resultado = buscaLivros;
+
+      next();
     } catch (erro) {
       next(erro);
     }
@@ -15,10 +17,7 @@ class LivroController {
     try {
       const id = req.params.id;
 
-      const livroResultados = await livros
-        .findById(id)
-        .populate("autor", "nome")
-        .exec();
+      const livroResultados = await livros.findById(id).exec();
 
       res.status(200).send(livroResultados);
     } catch (erro) {
@@ -62,17 +61,53 @@ class LivroController {
     }
   };
 
-  static listarLivroPorEditora = async (req, res, next) => {
+  static listarLivroPorFiltro = async (req, res, next) => {
     try {
-      const editora = req.query.editora;
+      const busca = await processaBusca(req.query);
 
-      const livrosResultado = await livros.find({ editora: editora });
+      if (busca !== null) {
+        const livrosResultado = livros.find(busca);
 
-      res.status(200).send(livrosResultado);
+        req.resultado = livrosResultado;
+        next();
+      } else {
+        res.status(200).send([]);
+      }
     } catch (erro) {
       next(erro);
     }
   };
+}
+async function processaBusca(parametros) {
+  const { editora, titulo, minPaginas, maxPaginas, nomeAutor } = parametros;
+
+  let busca = {};
+
+  if (editora) busca.editora = editora;
+  if (titulo) busca.titulo = { $regex: titulo, $options: "i" };
+
+  if (minPaginas || maxPaginas) busca.numeroPaginas = {};
+
+  if (minPaginas) busca.numeroPaginas.$gte = minPaginas;
+
+  if (maxPaginas) busca.numeroPaginas.$lte = maxPaginas;
+
+  if (nomeAutor) {
+    const autor = await autores.findOne({ nome: nomeAutor });
+
+    if (autor !== null) {
+      const autorId = autor._id;
+      busca.autor = autorId;
+    } else {
+      busca = null;
+    }
+  }
+
+  const livrosResultado = await livros.find(busca);
+
+  res.status(200).send(livrosResultado);
+
+  return busca;
 }
 
 export default LivroController;
